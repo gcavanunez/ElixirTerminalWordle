@@ -1,6 +1,6 @@
 defmodule WordleTerminalGame do
   alias WordleTerminalGame.{Wordle, GenServerWords}
-
+  @attempts 5
   @moduledoc """
   This module contains a function ('start/0') to play Wordle with words
   related to Elixir in the iex shell interactive WordleTerminalGame.
@@ -38,6 +38,14 @@ defmodule WordleTerminalGame do
     :timer.sleep(1000)
   end
 
+  defp out_of_luck(answer, explanation) do
+    colorized_answer = IO.ANSI.green() <> answer <> IO.ANSI.reset()
+    IO.puts("Hey you have no more tries!! The answer was #{colorized_answer}.")
+    :timer.sleep(1000)
+    IO.puts("Did you know that ... #{explanation} \n")
+    :timer.sleep(1000)
+  end
+
   @doc """
     play/3 function asks you to try to guess the answer giving you a clue.
     - It's first argument is the answer.
@@ -51,8 +59,8 @@ defmodule WordleTerminalGame do
        - ... without **correct format** input: The function shows you the error.
        - ... answering **exit**: end the game.
   """
-  @spec play(binary, binary, binary, pid) :: :ok
-  def play(answer, explanation, clue, pid) do
+  @spec play(binary, binary, binary, pid, number) :: :ok
+  def play(answer, explanation, clue, pid, counter) do
     guess =
       IO.gets("Contains #{String.length(answer)} letters, and a clue is `#{clue}`: ")
       |> String.replace("\n", "", trim: true)
@@ -61,20 +69,27 @@ defmodule WordleTerminalGame do
     unless guess == "exit" do
       response = Wordle.feedback(answer, guess)
 
-      case response do
-        {:error, msg} ->
-          IO.puts("Error: " <> msg)
-          play(answer, explanation, clue, pid)
+      cond do
+        counter == @attempts ->
+          out_of_luck(answer, explanation)
+          start(pid)
 
-        {:ok, result} ->
-          colorized_result = colorize(result, guess)
+        true ->
+          case response do
+            {:error, msg} ->
+              IO.puts("Error: " <> msg)
+              play(answer, explanation, clue, pid, counter)
 
-          if Enum.all?(result, fn x -> x == :green end) do
-            guess_the_answer(guess, explanation)
-            start(pid)
-          else
-            IO.puts("#{colorized_result}")
-            play(answer, explanation, clue, pid)
+            {:ok, result} ->
+              colorized_result = colorize(result, guess)
+
+              if Enum.all?(result, fn x -> x == :green end) do
+                guess_the_answer(guess, explanation)
+                start(pid)
+              else
+                IO.puts("#{colorized_result}")
+                play(answer, explanation, clue, pid, counter + 1)
+              end
           end
       end
     end
@@ -134,7 +149,7 @@ defmodule WordleTerminalGame do
         unless result == nil do
           explain_rules()
           {answer, answer_explanation, clue} = result
-          play(answer, answer_explanation, clue, pid)
+          play(answer, answer_explanation, clue, pid, 0)
         else
           IO.puts("Sorry, I haven't got more guessing words! :(")
         end
